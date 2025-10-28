@@ -16,13 +16,7 @@ export default function DeployNFTContract() {
 
   // 1. Hook para ENVIAR a transação de deploy
   // A função para enviar a transação é desestruturada como 'deployContract' (o nome do retorno do hook)
-  const {
-    data: deployHash,
-    writeContract: deployContractFn, // <--- Renomeando para evitar conflito com o nome do hook e ser mais claro
-    isPending: isDeployPending,
-    isSuccess: isDeploySent,
-    error: deployError,
-  } = useDeployContract();
+  const { deployContractAsync, data: deployHash } = useDeployContract({ config });
   
   // 2. Hook para AGUARDAR a confirmação do deploy e obter o endereço
   const {
@@ -45,8 +39,6 @@ export default function DeployNFTContract() {
     abi: MyNFT.abi,
     address: currentContractAddress, 
     functionName: "favoriteNumber", 
-    enabled: currentContractAddress !== "0x...", 
-    watch: true, 
   });
 
   // 4. Hook para ESCRITA (Write) do número
@@ -59,15 +51,16 @@ export default function DeployNFTContract() {
   }, [readNumber]);
 
   // Função para ENVIAR a transação de deploy
-  const handleDeploy = () => {
+  const handleDeploy = async () => {
     try {
       const bytecode = MyNFT.bytecode.object;
       
       // Chama a função RENOMEADA 'deployContractFn'
-      deployContractFn({
+      const r = await deployContractAsync({
         abi: MyNFT.abi,
         bytecode: `0x${bytecode}`,
       });
+      console.log(r);
     } catch (err) {
       console.error("Erro ao preparar transação de deploy:", err);
     }
@@ -92,6 +85,10 @@ export default function DeployNFTContract() {
       console.error("Erro ao salvar número:", err);
     }
   };
+  
+  const isDeployPending = false;
+  const isDeploySent = false;
+  const deployError = false;
 
   // Status de Deploy
   const deployStatusText = isDeployPending ? "Aguardando confirmação na carteira..." :
