@@ -1,86 +1,67 @@
-import React, { useState } from "react";
-import { useDeployContract, useWalletClient, useWriteContract, useReadContract } from 'wagmi'
-import { config } from '../wagmi.tsx';
+import React, { useState, useEffect } from "react";
+import { useDeployContract, useWalletClient, useWriteContract, useReadContract } from "wagmi";
+import { config } from "../wagmi.tsx";
 import MyNFT from "./MyNFT.json"; // ABI
 
-const simpleStorageAbi = MyNFT.abi;
-const CONTRACT_ADDRESS = '0x...'; // Endereço do seu contrato SimpleStorage
+const CONTRACT_ADDRESS = "0x..."; // Endereço do seu contrato NFT
 
-import { parseEther } from 'viem'; // Exemplo, não usado aqui mas comum
+export default function DeployNFTContract() {
+  const [deploying, setDeploying] = useState(false);
+  const [contractAddress, setContractAddress] = useState("");
+  const [favoriteNumber, setFavoriteNumber] = useState<number | null>(null);
+  const { deployContract } = useDeployContract({ config });
+  const { data: walletClient } = useWalletClient();
 
-async function DisplayNumber() {
-  const { data: number, isLoading, isError } = useReadContract({
-    abi: simpleStorageAbi,
+  const { data: readNumber, isLoading, isError, refetch } = useReadContract({
+    abi: MyNFT.abi,
     address: CONTRACT_ADDRESS,
-    functionName: 'favoriteNumber', // ou 'retrieve'
+    functionName: "favoriteNumber", // ou 'retrieve'
+    watch: true, // atualiza automaticamente
   });
 
-  if (isLoading) return "Carregando número...";
-  if (isError) return "Erro ao buscar o número.";
+  const { writeContract, isPending, isSuccess } = useWriteContract({
+    abi: MyNFT.abi,
+    address: CONTRACT_ADDRESS,
+    functionName: "store",
+  });
 
-  return "O número favorito é:" + number?.toString();
-}
+  useEffect(() => {
+    if (readNumber) setFavoriteNumber(Number(readNumber));
+  }, [readNumber]);
 
-
-
-async function SetNumber() {
-    const number = 20;
-    const { writeContract, isPending, isSuccess } = useWriteContract();
-
-    const handleStore = async () => {
-        if (!number) {
-            alert("Por favor, insira um número.");
-            return;
-        }
-
-        writeContract({
-        abi: simpleStorageAbi,
-        address: CONTRACT_ADDRESS,
-        functionName: 'store',
-        args: [BigInt(number)], // Argumentos devem ser passados como um array
-        });
-    };
-  return await handleStore();
-//   return (
-//     <div>
-//       <input
-//         type="number"
-//         value={number}
-//         onChange={(e) => setNumber(e.target.value)}
-//         placeholder="Digite um número"
-//       />
-//       <button onClick={handleStore} disabled={isPending}>
-//         {isPending ? 'Salvando...' : 'Salvar Número'}
-//       </button>
-//       {isSuccess && <div>Número salvo com sucesso!</div>}
-//     </div>
-//   );
-}
-
-export default async function DeployNFTContract() {
-   
-    const [deploying, setDeploying] = useState(false);
-    const [contractAddress, setContractAddress] = useState("");
-    const { deployContract } = useDeployContract({config});
-    const { data: walletClient } = useWalletClient();
-    const useReadContract = useWalletClient();
-
-    const deploy = async () => {
-        const bytecode = MyNFT.bytecode.object;
-        const result = await deployContract({
-        abi: MyNFT.abi, 
+  const deploy = async () => {
+    setDeploying(true);
+    try {
+      const bytecode = MyNFT.bytecode.object;
+      const result = await deployContract({
+        abi: MyNFT.abi,
         bytecode: `0x${bytecode}`,
-        })
-        console.log(result);
-    };
+      });
+      console.log("Deploy result:", result);
+      setContractAddress(result);
+    } catch (err) {
+      console.error("Erro ao deployar contrato:", err);
+    } finally {
+      setDeploying(false);
+    }
+  };
 
-    console.log(await DisplayNumber());
+  const handleStore = async () => {
+    const numberToStore = 20;
+    try {
+      await writeContract({ args: [BigInt(numberToStore)] });
+      await refetch();
+    } catch (err) {
+      console.error("Erro ao salvar número:", err);
+    }
+  };
 
   return (
     <div style={{ padding: 20 }}>
       <button onClick={deploy} disabled={deploying}>
         {deploying ? "Deployando..." : "Deploy Contrato NFT"}
       </button>
+
       {contractAddress && (
         <p>
           Endereço do contrato:{" "}
@@ -89,6 +70,19 @@ export default async function DeployNFTContract() {
           </a>
         </p>
       )}
+
+      <div style={{ marginTop: 20 }}>
+        <button onClick={handleStore} disabled={isPending}>
+          {isPending ? "Salvando..." : "Salvar Número"}
+        </button>
+        {isSuccess && <p>Número salvo com sucesso!</p>}
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        {isLoading && <p>Carregando número...</p>}
+        {isError && <p>Erro ao buscar o número.</p>}
+        {favoriteNumber !== null && <p>O número favorito é: {favoriteNumber}</p>}
+      </div>
     </div>
   );
 }
