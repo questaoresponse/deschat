@@ -7,6 +7,7 @@ import {
     optimism,
     polygon,
     sepolia,
+    
 } from 'wagmi/chains';
 
 export const config = getDefaultConfig({

@@ -3,22 +3,27 @@ import {
   useDeployContract,
   useWriteContract,
   useReadContract,
-  useWaitForTransactionReceipt
+  useWaitForTransactionReceipt,
 } from "wagmi";
-import { config } from "../wagmi.tsx";
-import MyNFT from "./MyNFT.json"; // ABI e Bytecode
+import MyNFT from "./contracts/EventNFT/EventNFT.json"; // ABI e bytecode juntos
 
-const CONTRACT_ADDRESS = "0x..."; // Endereço do contrato pré-existente (se houver)
+
+const DEFAULT_CONTRACT_ADDRESS = "0xf9d039ffc0fac1adb1c6d582256c2a5c2aa91008";
+// const DEFAULT_CONTRACT_ADDRESS = "0x59ce48265ebdeea87c54a41c3882a0bfdaab5c49";
 
 export default function DeployNFTContract() {
   const [favoriteNumber, setFavoriteNumber] = useState<number | null>(null);
   const [numberToStore, setNumberToStore] = useState(20);
 
-  // 1. Hook para ENVIAR a transação de deploy
-  // A função para enviar a transação é desestruturada como 'deployContract' (o nome do retorno do hook)
-  const { deployContractAsync, data: deployHash } = useDeployContract({ config });
-  
-  // 2. Hook para AGUARDAR a confirmação do deploy e obter o endereço
+  // ---- DEPLOY ----
+  const {
+    deployContractAsync,
+    data: deployHash,
+    isPending: isDeployPending,
+    isError: isDeployError,
+    error: deployError,
+  } = useDeployContract();
+
   const {
     data: deployReceipt,
     isLoading: isReceiptLoading,
@@ -27,9 +32,10 @@ export default function DeployNFTContract() {
     hash: deployHash,
   });
 
-  // 3. Hook para LEITURA (Read) do número
-  const currentContractAddress = deployReceipt?.contractAddress || CONTRACT_ADDRESS;
-  
+  const currentContractAddress =
+    deployReceipt?.contractAddress || DEFAULT_CONTRACT_ADDRESS;
+
+  // ---- READ ----
   const {
     data: readNumber,
     isLoading: isReadLoading,
@@ -37,108 +43,129 @@ export default function DeployNFTContract() {
     refetch: refetchNumber,
   } = useReadContract({
     abi: MyNFT.abi,
-    address: currentContractAddress, 
-    functionName: "favoriteNumber", 
+    address: currentContractAddress,
+    functionName: "tokenCounter", // certifique-se de que existe no contrato
   });
 
-  // 4. Hook para ESCRITA (Write) do número
-  // A função de envio da transação é desestruturada como 'writeContract'
-  const { writeContract, isPending: isStorePending, isSuccess: isStoreSuccess } = useWriteContract();
+  // ---- WRITE ----
+  const {
+    writeContractAsync,
+    isPending: isStorePending,
+    isSuccess: isStoreSuccess,
+    error: storeError,
+  } = useWriteContract();
 
-  // Efeito para atualizar o estado local quando a leitura é concluída
+  // Atualiza estado ao ler valor
   useEffect(() => {
-    if (readNumber) setFavoriteNumber(Number(readNumber));
+    if (readNumber !== undefined) setFavoriteNumber(Number(readNumber));
   }, [readNumber]);
 
-  // Função para ENVIAR a transação de deploy
+  // Deploya o contrato
   const handleDeploy = async () => {
     try {
       const bytecode = MyNFT.bytecode.object;
-      
-      // Chama a função RENOMEADA 'deployContractFn'
-      const r = await deployContractAsync({
+      const txHash = await deployContractAsync({
         abi: MyNFT.abi,
         bytecode: `0x${bytecode}`,
       });
-      console.log(r);
+      console.log("Deploy enviado:", txHash);
     } catch (err) {
-      console.error("Erro ao preparar transação de deploy:", err);
+      console.error("Erro ao fazer deploy:", err);
     }
   };
 
-  // Função para ENVIAR a transação de escrita (store)
-  const handleStore = () => {
-    if (currentContractAddress === "0x...") {
-      alert("Por favor, faça o deploy do contrato ou defina um endereço válido.");
-      return;
-    }
-
+  // Escreve um número no contrato
+  const handleStore = async () => {
+    if (!currentContractAddress) return alert("Endereço inválido.");
     try {
-      // Chama a função 'writeContract'
-      writeContract({
+      const tx = await writeContractAsync({
         abi: MyNFT.abi,
         address: currentContractAddress,
-        functionName: "store",
-        args: [BigInt(numberToStore)],
+        functionName: "mint", // certifique-se de que existe no contrato
       });
+      console.log("Transação enviada:", tx);
     } catch (err) {
       console.error("Erro ao salvar número:", err);
     }
   };
-  
-  const isDeployPending = false;
-  const isDeploySent = false;
-  const deployError = false;
 
-  // Status de Deploy
-  const deployStatusText = isDeployPending ? "Aguardando confirmação na carteira..." :
-                           isDeploySent && isReceiptLoading ? `Transação enviada: ${deployHash.slice(0, 6)}... Aguardando mineração...` :
-                           isDeploySuccess ? `Deploy concluído! Endereço: ${currentContractAddress.slice(0, 6)}...` :
-                           deployError ? `Erro no Deploy: ${deployError.shortMessage || deployError.message}` :
-                           "Deploy Contrato NFT";
-  
+  useEffect(()=>{
+    setInterval(refetchNumber, 500);
+  },[]);
+
+  // Status do deploy
+  const deployStatusText = isDeployPending
+    ? "Aguardando confirmação na carteira..."
+    : isReceiptLoading
+    ? `Transação enviada: ${deployHash?.slice(0, 6)}... aguardando mineração...`
+    : isDeploySuccess
+    ? `Deploy concluído! Endereço: ${currentContractAddress.slice(0, 6)}...`
+    : isDeployError
+    ? `Erro no deploy: ${deployError?.shortMessage || deployError?.message}`
+    : "Deploy Contrato NFT";
+
   return (
     <div style={{ padding: 20 }}>
       <h2>Deploy e Interação com Contrato</h2>
-      
-      {/* Seção de Deploy */}
-      <button onClick={handleDeploy} disabled={isDeployPending || isReceiptLoading || isDeploySuccess}>
+
+      {/* Deploy */}
+      <button
+        onClick={handleDeploy}
+        disabled={isDeployPending || isReceiptLoading || isDeploySuccess}
+      >
         {deployStatusText}
       </button>
 
-      {currentContractAddress !== "0x..." && (
+      {currentContractAddress && (
         <p>
           Endereço do contrato:{" "}
-          <a href={`https://mumbai.polygonscan.com/address/${currentContractAddress}`} target="_blank" rel="noopener noreferrer">
+          <a
+            href={`https://amoy.polygonscan.com/address/${currentContractAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {currentContractAddress}
           </a>
         </p>
       )}
 
-      {/* Seção de Escrita */}
-      <hr style={{ margin: '20px 0' }} />
+      {/* Escrita */}
+      <hr style={{ margin: "20px 0" }} />
       <div>
         <h3>Salvar Número</h3>
-        <input 
-            type="number" 
-            value={numberToStore} 
-            onChange={(e) => setNumberToStore(Number(e.target.value))} 
-            style={{ marginRight: 10, padding: 5 }}
-            min="0"
+        <input
+          type="number"
+          value={numberToStore}
+          onChange={(e) => setNumberToStore(Number(e.target.value))}
+          style={{ marginRight: 10, padding: 5 }}
+          min="0"
         />
-        <button onClick={handleStore} disabled={isStorePending || currentContractAddress === "0x..."}>
+        <button
+          onClick={handleStore}
+          disabled={isStorePending || !currentContractAddress}
+        >
           {isStorePending ? "Salvando..." : "Salvar Número"}
         </button>
-        {isStoreSuccess && <p style={{ color: 'green' }}>Transação enviada com sucesso!</p>}
+        {isStoreSuccess && (
+          <p style={{ color: "green" }}>Transação enviada com sucesso!</p>
+        )}
+        {storeError && (
+          <p style={{ color: "red" }}>Erro: {storeError.message}</p>
+        )}
       </div>
 
-      {/* Seção de Leitura */}
-      <hr style={{ margin: '20px 0' }} />
+      {/* Leitura */}
+      <hr style={{ margin: "20px 0" }} />
       <div>
         <h3>Leitura do Contrato</h3>
         {isReadLoading && <p>Carregando número...</p>}
-        {isReadError && <p style={{ color: 'red' }}>Erro ao buscar o número.</p>}
-        {favoriteNumber !== null && <p>O **número favorito** é: <strong>{favoriteNumber}</strong></p>}
+        {isReadError && <p style={{ color: "red" }}>Erro ao buscar número.</p>}
+        {favoriteNumber !== null && (
+          <p>
+            O número favorito é: <strong>{favoriteNumber}</strong>
+          </p>
+        )}
+        <button onClick={() => refetchNumber()}>Atualizar</button>
       </div>
     </div>
   );
