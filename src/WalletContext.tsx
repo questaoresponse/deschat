@@ -7,6 +7,8 @@ import {
 import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
+  WalletConnectWalletAdapter,
+  TrustWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { clusterApiUrl } from '@solana/web3.js';
@@ -26,6 +28,19 @@ export const WalletContextProvider = ({ children } : {children: any}) => {
     //   new SlopeWalletAdapter(),
     //   new SolletWalletAdapter(),
       new SolflareWalletAdapter(),
+      new TrustWalletAdapter(),
+      new WalletConnectWalletAdapter({
+        network: WalletAdapterNetwork.Devnet,
+        options: {
+          projectId: "88915c65b9ad254612c4e9c0f528893e", // pegue em https://cloud.walletconnect.com
+          metadata: {
+            name: "Meu DApp Solana",
+            description: "DApp com WalletConnect e Anchor",
+            url: "https://meuapp.com",
+            icons: ["https://meuapp.com/icon.png"],
+          },
+        },
+      })
     //   new BackpackWalletAdapter(),
     ],
     []
